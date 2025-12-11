@@ -3,11 +3,10 @@ import sys
 import subprocess
 import json
 import shutil
-import re
 import threading
 import time
 
-# --- 1. 自動依賴檢查與安裝 (在 import 其他第三方庫之前) ---
+# --- 1. 自動依賴檢查 ---
 def install(package):
     print(f"[系統] 正在安裝必要套件: {package}...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
@@ -15,21 +14,18 @@ def install(package):
 REQUIRED_PACKAGES = ['eel', 'yt-dlp', 'requests', 'mutagen']
 for package in REQUIRED_PACKAGES:
     try:
-        __import__(package.replace('-', '_')) # yt-dlp -> yt_dlp
+        __import__(package.replace('-', '_'))
     except ImportError:
         try:
             install(package)
         except Exception as e:
             print(f"[錯誤] 無法安裝 {package}: {e}")
-            input("按 Enter 鍵退出...")
             sys.exit(1)
 
-# --- 2. 引入庫 ---
 import eel
 from yt_dlp import YoutubeDL
-import requests
 
-# --- 3. 設定與初始化 ---
+# --- 2. 設定管理 ---
 CONFIG_FILE = 'config.json'
 DEFAULT_CONFIG = {
     "system_settings": {
@@ -38,15 +34,16 @@ DEFAULT_CONFIG = {
         "theme": "dark"
     },
     "default_preferences": {
-        "video_format": "mp4",
-        "audio_format": "m4a",
+        "video_ext": "mp4",
+        "audio_ext": "mp3",
+        "image_ext": "jpg",
         "audio_bitrate": "192",
         "embed_thumbnail": True,
         "embed_metadata": True,
         "video_resolution": "best"
     },
     "advanced": {
-        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36",
         "retries": 10,
         "fragment_retries": 10,
         "check_dependencies_on_startup": True
@@ -57,7 +54,6 @@ current_config = {}
 
 def load_or_create_config():
     global current_config
-    # 嘗試偵測系統 ffmpeg
     system_ffmpeg = shutil.which("ffmpeg")
     
     if os.path.exists(CONFIG_FILE):
@@ -72,10 +68,8 @@ def load_or_create_config():
             current_config["system_settings"]["ffmpeg_path"] = system_ffmpeg
         save_config()
     
-    # 如果設定檔裡沒有 ffmpeg 但系統有，自動補上
     if not current_config["system_settings"]["ffmpeg_path"] and system_ffmpeg:
         current_config["system_settings"]["ffmpeg_path"] = system_ffmpeg
-        save_config()
 
 def save_config():
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -85,7 +79,7 @@ def log_to_frontend(msg, level="info"):
     print(f"[{level.upper()}] {msg}")
     eel.add_log(msg, level)
 
-# --- 4. 核心功能 ---
+# --- 3. 核心功能 ---
 
 @eel.expose
 def init_app():
@@ -97,7 +91,6 @@ def update_config(new_settings):
     global current_config
     current_config = new_settings
     save_config()
-    return "設定已儲存"
 
 @eel.expose
 def select_directory():
@@ -123,28 +116,25 @@ def select_ffmpeg_file():
 
 @eel.expose
 def analyze_url(url):
-    """分析網址，回傳平台與是否為直播"""
-    result = {"platform": "unknown", "is_live": False}
-    
+    """通用分析：現在全部都視為 yt-dlp 支援的網站"""
+    result = {"platform": "universal", "is_live": False}
     if not url: return result
     
-    # 簡單正則判斷平台
-    if "youtube.com" in url or "youtu.be" in url:
+    # 簡單標記平台名稱供前端顯示 UI 用，實際下載邏輯已統一
+    lower_url = url.lower()
+    if "youtube" in lower_url or "youtu.be" in lower_url:
         result["platform"] = "youtube"
-    elif "bilibili.com" in url or "BV" in url:
+    elif "bilibili" in lower_url or "bv" in lower_url:
         result["platform"] = "bilibili"
-    elif "twitch.tv" in url:
+    elif "twitch" in lower_url:
         result["platform"] = "twitch"
-    
-    # 嘗試判斷是否為直播 (這只是一個初步檢查，準確判斷需要 yt-dlp extract_info)
-    # 為了效能，我們先用關鍵字判斷，若要精準可在前端提示使用者自行確認
-    if "live" in url: 
-        result["is_live"] = True
-    
-    # 對於 Twitch，除了 /videos/ 之外的大多是直播
-    if result["platform"] == "twitch" and "/videos/" not in url and "/clip/" not in url:
-        result["is_live"] = True
+    else:
+        result["platform"] = "generic" # 其他網站
 
+    # 直播關鍵字偵測
+    if "live" in lower_url or "twitch.tv" in lower_url and "/videos/" not in lower_url and "/clip/" not in lower_url:
+        result["is_live"] = True
+        
     return result
 
 class MyLogger:
@@ -160,24 +150,12 @@ def progress_hook(d):
             speed = d.get('_speed_str', 'N/A')
             eta = d.get('_eta_str', 'N/A')
             eel.update_progress(float(p), f"下載中: {speed} | 剩餘: {eta}")
-        except:
-            pass
+        except: pass
     elif d['status'] == 'finished':
-        eel.update_progress(100, "下載完成，正在處理轉檔與 Metadata...")
+        eel.update_progress(100, "下載完成，正在進行轉檔與嵌入處理...")
 
 @eel.expose
 def start_download_task(url, options):
-    """
-    options 結構預期:
-    {
-        "mode": "video" | "audio" | "cover" | "metadata",
-        "video_quality": "best" | "1080" | ...,
-        "audio_quality": "192",
-        "embed_cover": bool,
-        "embed_meta": bool,
-        "is_live_mode": bool
-    }
-    """
     threading.Thread(target=_download_worker, args=(url, options), daemon=True).start()
 
 def _download_worker(url, options):
@@ -185,99 +163,119 @@ def _download_worker(url, options):
     ffmpeg_path = cfg["system_settings"]["ffmpeg_path"]
     
     if not ffmpeg_path or not os.path.exists(ffmpeg_path):
-        log_to_frontend("找不到 FFmpeg，請先至設定頁面指定路徑！", "error")
+        log_to_frontend("找不到 FFmpeg，請設定路徑！", "error")
         return
 
-    output_dir = os.path.join(cfg["system_settings"]["output_directory"], options['mode'].capitalize())
+    mode = options['mode']
+    # 根據模式建立子資料夾
+    output_dir = os.path.join(cfg["system_settings"]["output_directory"], mode.capitalize())
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    log_to_frontend(f"開始任務: {url} [{options['mode']}]", "info")
+    log_to_frontend(f"啟動萬能引擎: {url}", "info")
     
-    # 基礎 yt-dlp 設定
+    # --- yt-dlp 基礎設定 ---
     ydl_opts = {
         'ffmpeg_location': ffmpeg_path,
         'logger': MyLogger(),
         'progress_hooks': [progress_hook],
+        # 檔名模板: [作者] 標題 [ID].副檔名
         'outtmpl': os.path.join(output_dir, '[%(uploader)s] %(title)s [%(id)s].%(ext)s'),
         'retries': cfg['advanced']['retries'],
         'fragment_retries': cfg['advanced']['fragment_retries'],
-        # 解決部分網站 User-Agent 問題
         'user_agent': cfg['advanced']['user_agent'],
-        # Bilibili cookie 支援 (如果有需要可在 config 加入 cookies_from_browser)
+        # 允許下載播放列表(視需求而定，目前設為 False 避免誤下整個頻道)
+        'noplaylist': True,
+        'writethumbnail': False, # 預設關閉，由下面邏輯控制
     }
 
-    mode = options['mode']
-    
+    # --- 模式邏輯配置 ---
     try:
+        # 1. 影片模式 (Video)
         if mode == 'video':
-            # 畫質選擇
-            if options['video_quality'] == 'best':
-                ydl_opts['format'] = "bestvideo+bestaudio/best"
-            elif options['video_quality'] == '4k':
-                ydl_opts['format'] = "bestvideo[height<=2160]+bestaudio/best[height<=2160]"
-            elif options['video_quality'] == '1080':
-                ydl_opts['format'] = "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
-            elif options['video_quality'] == '720':
-                ydl_opts['format'] = "bestvideo[height<=720]+bestaudio/best[height<=720]"
+            # 畫質設定
+            quality_map = {
+                'best': "bestvideo+bestaudio/best",
+                '4k': "bestvideo[height<=2160]+bestaudio/best[height<=2160]",
+                '1080': "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+                '720': "bestvideo[height<=720]+bestaudio/best[height<=720]"
+            }
+            ydl_opts['format'] = quality_map.get(options['video_quality'], 'bestvideo+bestaudio/best')
             
-            ydl_opts['merge_output_format'] = 'mp4'
+            # 格式轉換: 強制合併為指定容器 (mp4, mkv, mov, etc.)
+            ydl_opts['merge_output_format'] = options['video_ext']
             
-            if options['embed_thumbnail']:
+            # 嵌入設定
+            if options['embed_cover']:
                 ydl_opts['writethumbnail'] = True
                 ydl_opts['embedthumbnail'] = True
             
             if options['embed_meta']:
                 ydl_opts['addmetadata'] = True
 
+        # 2. 音訊模式 (Audio)
         elif mode == 'audio':
             ydl_opts['format'] = 'bestaudio/best'
-            ydl_opts['postprocessors'] = [{
+            
+            # 透過 PostProcessor 轉檔
+            post_processors = [{
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'm4a', # 預設 m4a，較好支援 metadata
+                'preferredcodec': options['audio_ext'], # mp3, m4a, flac, wav, opus
                 'preferredquality': options['audio_quality'],
             }]
             
-            if options['embed_thumbnail']:
+            # 音訊嵌入封面 (需先下載封面 -> 嵌入 -> 轉檔)
+            if options['embed_cover']:
                 ydl_opts['writethumbnail'] = True
-                # Audio 嵌入封面需要 EmbedThumbnail PP
-                ydl_opts['postprocessors'].append({'key': 'EmbedThumbnail'})
+                post_processors.append({'key': 'EmbedThumbnail'})
             
+            # 音訊嵌入 Metadata
             if options['embed_meta']:
                 ydl_opts['addmetadata'] = True
-                ydl_opts['postprocessors'].append({'key': 'FFmpegMetadata'})
+                post_processors.append({'key': 'FFmpegMetadata'})
+            
+            ydl_opts['postprocessors'] = post_processors
 
+        # 3. 純封面模式 (Cover)
         elif mode == 'cover':
             ydl_opts['skip_download'] = True
             ydl_opts['writethumbnail'] = True
-            # 只下載封面，不轉檔
+            # 轉換封面格式 (jpg, png, webp)
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegThumbnailsConvertor',
+                'format': options['image_ext'], 
+                'when': 'before_dl' 
+            }]
 
+        # 4. 純 Metadata 模式
         elif mode == 'metadata':
             ydl_opts['skip_download'] = True
             ydl_opts['writeinfojson'] = True
 
-        # 直播模式特殊處理
+        # 直播模式處理
         if options.get('is_live_mode'):
-            log_to_frontend("警告: 正在使用直播錄製模式 (Live/DVR)。", "warn")
-            ydl_opts['live_from_start'] = True # 嘗試回朔
-            # 直播通常不建議即時嵌入封面，容易出錯，但 yt-dlp 通常會忽略
-        
-        # 執行下載
+            log_to_frontend("⚠️ 啟動直播錄製 (DVR) 模式", "warn")
+            ydl_opts['live_from_start'] = True
+            # 直播通常不建議即時嵌入，容易造成壞檔
+            if mode == 'video':
+                ydl_opts.pop('embedthumbnail', None)
+
+        # --- 執行下載 ---
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         
-        log_to_frontend("任務圓滿完成！", "success")
+        log_to_frontend("✅ 任務執行完畢", "success")
         eel.update_progress(100, "完成")
 
     except Exception as e:
-        log_to_frontend(f"執行失敗: {str(e)}", "error")
-        eel.update_progress(0, "錯誤")
+        log_to_frontend(f"❌ 錯誤: {str(e)}", "error")
+        eel.update_progress(0, "失敗")
 
-# --- 5. 啟動 Eel ---
+# --- 4. 啟動 ---
 if __name__ == '__main__':
     load_or_create_config()
     eel.init('web')
     try:
-        eel.start('index.html', size=(950, 800))
+        eel.start('index.html', size=(950, 850))
     except (SystemExit, MemoryError, KeyboardInterrupt):
         pass
