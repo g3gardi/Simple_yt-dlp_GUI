@@ -1,4 +1,4 @@
-# Simple_yt-dlp_GUI_v1.0.1
+# Simple_yt-dlp_GUI
 
 ![License](https://img.shields.io/github/license/h-o-w-a-r-d/Simple_yt-dlp_GUI)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
